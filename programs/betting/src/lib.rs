@@ -38,4 +38,7 @@ pub mod betting {
     pub fn book_init(ctx: Context<BookInitAccounts>, bet_type: BetType) -> Result<()> {
         instructions::book_init(ctx, bet_type)
     }
+    pub fn book_close(ctx: Context<BookCloseAccounts>) -> Result<()> {
+        instructions::book_close(ctx)
+    }
 }

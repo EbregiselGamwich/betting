@@ -6,4 +6,6 @@ pub enum BettingError {
     NoAuthority = 0,
     #[msg("UnsettledBooksRemaining")]
     UnsettledBooksRemaining = 1,
+    #[msg("BookNotSettled")]
+    BookNotSettled = 2,
 }
