@@ -41,4 +41,7 @@ pub mod betting {
     pub fn book_close(ctx: Context<BookCloseAccounts>) -> Result<()> {
         instructions::book_close(ctx)
     }
+    pub fn book_bettor_opt_int(ctx: Context<BookBettorOptInAccounts>) -> Result<()> {
+        instructions::book_bettor_opt_int(ctx)
+    }
 }

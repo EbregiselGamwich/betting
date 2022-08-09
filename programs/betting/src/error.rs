@@ -8,4 +8,6 @@ pub enum BettingError {
     UnsettledBooksRemaining = 1,
     #[msg("BookNotSettled")]
     BookNotSettled = 2,
+    #[msg("UserAlreadyOptIn")]
+    UserAlreadyOptIn = 3,
 }
