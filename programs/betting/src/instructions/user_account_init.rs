@@ -91,7 +91,7 @@ mod test {
         let user_pda_account_state =
             UserAccount::try_deserialize(&mut user_pda_account.data.as_slice()).unwrap();
         assert_eq!(user_pda_account_state.authority, user.pubkey());
-        assert!(user_pda_account_state.bets.is_empty());
+        assert!(user_pda_account_state.books_bet_on.is_empty());
         assert!(user_pda_account_state.books_oracled.is_empty());
         assert_eq!(user_pda_account_state.books_initialized, 0);
     }

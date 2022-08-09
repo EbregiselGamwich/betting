@@ -14,7 +14,7 @@ pub fn user_account_close(ctx: Context<UserAccountCloseAccounts>) -> Result<()> 
     require!(
         ctx.accounts.user_account_pda.books_initialized == 0
             && ctx.accounts.user_account_pda.books_oracled.is_empty()
-            && ctx.accounts.user_account_pda.bets.is_empty(),
+            && ctx.accounts.user_account_pda.books_bet_on.is_empty(),
         BettingError::UnsettledBooksRemaining
     );
     Ok(())
@@ -22,10 +22,7 @@ pub fn user_account_close(ctx: Context<UserAccountCloseAccounts>) -> Result<()> 
 
 #[cfg(test)]
 mod test {
-    use std::{
-        collections::{BTreeMap, BTreeSet},
-        rc::Rc,
-    };
+    use std::{collections::VecDeque, rc::Rc};
 
     use anchor_client::RequestBuilder;
     use anchor_lang::AccountSerialize;
@@ -58,8 +55,8 @@ mod test {
         let user_pda_state = UserAccount {
             authority: user.pubkey(),
             books_initialized: 0,
-            books_oracled: BTreeSet::new(),
-            bets: BTreeMap::new(),
+            books_oracled: VecDeque::new(),
+            books_bet_on: VecDeque::new(),
         };
         let mut user_pda_data: Vec<u8> = Vec::new();
         user_pda_state.try_serialize(&mut user_pda_data).unwrap();
@@ -134,8 +131,8 @@ mod test {
         let user_pda_state = UserAccount {
             authority: user.pubkey(),
             books_initialized: 1,
-            books_oracled: BTreeSet::new(),
-            bets: BTreeMap::new(),
+            books_oracled: VecDeque::new(),
+            books_bet_on: VecDeque::new(),
         };
         let mut user_pda_data: Vec<u8> = Vec::new();
         user_pda_state.try_serialize(&mut user_pda_data).unwrap();
