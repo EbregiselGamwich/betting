@@ -21,24 +21,8 @@ pub struct Book {
     pub positions: BTreeMap<Pubkey, Position>,
 }
 impl Book {
-    pub const INIT_SPACE: usize = 8
-        + 4
-        + 32
-        + 4
-        + 8
-        + 8
-        + 8
-        + 8
-        + BetType::INIT_SPACE
-        + 8
-        + 1
-        + BetOutcome::INIT_SPACE
-        + 1
-        + 8
-        + 4
-        + 4
-        + 4
-        + 4;
+    pub const INIT_SPACE: usize =
+        8 + 4 + 32 + 4 + 8 + 8 + 8 + 8 + BetType::INIT_SPACE + 8 + 1 + BetOutcome::INIT_SPACE + 1 + 8 + 4 + 4 + 4 + 4;
     pub fn current_space(&self) -> usize {
         Self::INIT_SPACE
             + (32 + Oracle::INIT_SPACE) * self.oracles.len()
@@ -63,16 +47,14 @@ impl Book {
                     self.bets_for.insert(index, bet);
                 }
             },
-            BetDirection::Against => {
-                match self.bets_against.binary_search_by_key(&bet.id, |b| b.id) {
-                    Ok(_) => {
-                        panic!();
-                    }
-                    Err(index) => {
-                        self.bets_against.insert(index, bet);
-                    }
+            BetDirection::Against => match self.bets_against.binary_search_by_key(&bet.id, |b| b.id) {
+                Ok(_) => {
+                    panic!();
                 }
-            }
+                Err(index) => {
+                    self.bets_against.insert(index, bet);
+                }
+            },
         }
 
         self.bets_count += 1;
@@ -149,15 +131,16 @@ impl Eq for Bet {}
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, Default)]
 pub struct Position {
-    pub bets_count: u32,     // 4
-    pub payout_for: u64,     // 8
-    pub payout_against: u64, // 8
-    pub wager: u64,          // 8
-    pub dealt_wager: u64,    // 8
-    pub dispute_stake: u64,  // 8
+    pub active_bets_count: u32, // 4
+    pub bets_count: u32,        // 4
+    pub payout_for: u64,        // 8
+    pub payout_against: u64,    // 8
+    pub wager: u64,             // 8
+    pub dealt_wager: u64,       // 8
+    pub dispute_stake: u64,     // 8
 }
 impl Position {
-    pub const INIT_SPACE: usize = 4 + 8 + 8 + 8 + 8 + 8;
+    pub const INIT_SPACE: usize = 4 + 4 + 8 + 8 + 8 + 8 + 8;
 }
 
 #[cfg(test)]
@@ -224,6 +207,7 @@ mod test {
         book.positions.insert(
             bettor_key,
             Position {
+                active_bets_count: 0,
                 bets_count: 0,
                 payout_for: 0,
                 payout_against: 0,
@@ -261,6 +245,7 @@ mod test {
         book.positions.insert(
             bettor_key,
             Position {
+                active_bets_count: 0,
                 bets_count: 0,
                 payout_for: 0,
                 payout_against: 0,
