@@ -31,4 +31,7 @@ pub mod betting {
     ) -> Result<()> {
         instructions::game_init(ctx, game_id, league_id, home_team_id, away_team_id, kickoff)
     }
+    pub fn game_close(ctx: Context<GameCloseAccounts>) -> Result<()> {
+        instructions::game_close(ctx)
+    }
 }
