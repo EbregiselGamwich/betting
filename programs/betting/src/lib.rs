@@ -15,4 +15,7 @@ pub mod betting {
     pub fn user_account_init(ctx: Context<UserAccountInitAccounts>) -> Result<()> {
         instructions::user_account_init(ctx)
     }
+    pub fn user_account_close(ctx: Context<UserAccountCloseAccounts>) -> Result<()> {
+        instructions::user_account_close(ctx)
+    }
 }
