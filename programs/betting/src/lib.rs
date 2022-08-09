@@ -18,4 +18,7 @@ pub mod betting {
     pub fn user_account_close(ctx: Context<UserAccountCloseAccounts>) -> Result<()> {
         instructions::user_account_close(ctx)
     }
+    pub fn user_account_shrink(ctx: Context<UserAccountShrinkAccounts>) -> Result<()> {
+        instructions::user_account_shrink(ctx)
+    }
 }
