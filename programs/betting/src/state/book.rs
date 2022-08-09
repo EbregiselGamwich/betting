@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct Book {
-    pub game: Pubkey,
+    pub game_id: u32,
     pub initiator: Pubkey,
     pub bets_count: u32,
     pub wager_total: u64,
@@ -22,7 +22,7 @@ pub struct Book {
 }
 impl Book {
     pub const INIT_SPACE: usize = 8
-        + 32
+        + 4
         + 32
         + 4
         + 8
@@ -174,7 +174,7 @@ mod test {
     #[test]
     fn test_state_book_init_space() {
         let book = Book {
-            game: Pubkey::new_unique(),
+            game_id: 1,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
             wager_total: 0,
@@ -197,7 +197,7 @@ mod test {
     #[test]
     fn test_state_book_current_space() {
         let mut book = Book {
-            game: Pubkey::new_unique(),
+            game_id: 1,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
             wager_total: 0,
@@ -240,7 +240,7 @@ mod test {
     #[test]
     fn test_state_book_new_bet() {
         let mut book = Book {
-            game: Pubkey::new_unique(),
+            game_id: 1,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
             wager_total: 0,

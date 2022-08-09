@@ -5,6 +5,7 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 use instructions::*;
+use state::*;
 
 declare_id!("AdffT7aGQ2gnavJutMWpHWph8kXnir1kCZs99YPTue87");
 
@@ -33,5 +34,8 @@ pub mod betting {
     }
     pub fn game_close(ctx: Context<GameCloseAccounts>) -> Result<()> {
         instructions::game_close(ctx)
+    }
+    pub fn book_init(ctx: Context<BookInitAccounts>, bet_type: BetType) -> Result<()> {
+        instructions::book_init(ctx, bet_type)
     }
 }
