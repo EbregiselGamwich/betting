@@ -21,4 +21,14 @@ pub mod betting {
     pub fn user_account_shrink(ctx: Context<UserAccountShrinkAccounts>) -> Result<()> {
         instructions::user_account_shrink(ctx)
     }
+    pub fn game_init(
+        ctx: Context<GameInitAccounts>,
+        game_id: u32,
+        league_id: u32,
+        home_team_id: u32,
+        away_team_id: u32,
+        kickoff: i64,
+    ) -> Result<()> {
+        instructions::game_init(ctx, game_id, league_id, home_team_id, away_team_id, kickoff)
+    }
 }
