@@ -10,4 +10,8 @@ pub enum BettingError {
     BookNotSettled = 2,
     #[msg("UserAlreadyOptIn")]
     UserAlreadyOptIn = 3,
+    #[msg("UserDidNotOptIn")]
+    UserDidNotOptIn = 4,
+    #[msg("MinBetAmountNotMet")]
+    MinBetAmountNotMet = 5,
 }

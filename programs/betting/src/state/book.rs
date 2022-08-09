@@ -62,6 +62,7 @@ impl Book {
         let position = self.positions.get_mut(&bettor).unwrap();
         position.bets_count += 1;
         position.wager += wager;
+        position.active_bets_count += 1;
     }
 }
 

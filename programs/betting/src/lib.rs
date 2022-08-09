@@ -44,4 +44,12 @@ pub mod betting {
     pub fn book_bettor_opt_int(ctx: Context<BookBettorOptInAccounts>) -> Result<()> {
         instructions::book_bettor_opt_int(ctx)
     }
+    pub fn book_bettor_place_bet(
+        ctx: Context<BookBettorPlaceBetAccounts>,
+        odds: u32,
+        wager: u64,
+        bet_direction: BetDirection,
+    ) -> Result<()> {
+        instructions::book_bettor_place_bet(ctx, odds, wager, bet_direction)
+    }
 }

@@ -1,4 +1,5 @@
 pub mod book_bettor_opt_int;
+pub mod book_bettor_place_bet;
 pub mod book_close;
 pub mod book_init;
 pub mod game_close;
@@ -8,6 +9,7 @@ pub mod user_account_init;
 pub mod user_account_shrink;
 
 pub use book_bettor_opt_int::*;
+pub use book_bettor_place_bet::*;
 pub use book_close::*;
 pub use book_init::*;
 pub use game_close::*;
