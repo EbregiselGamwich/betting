@@ -52,6 +52,13 @@ pub mod betting {
     ) -> Result<()> {
         instructions::book_bettor_place_bet(ctx, odds, wager, bet_direction)
     }
+    pub fn book_bettor_cancel_bet(
+        ctx: Context<BookBettorCancelBetAccounts>,
+        bet_id: u64,
+        bet_direction: BetDirection,
+    ) -> Result<()> {
+        instructions::book_bettor_cancel_bet(ctx, bet_id, bet_direction)
+    }
     pub fn book_match_bets(ctx: Context<BookMatchBetsAccounts>) -> Result<()> {
         instructions::book_match_bets(ctx)
     }

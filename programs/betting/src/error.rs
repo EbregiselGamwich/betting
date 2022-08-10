@@ -16,4 +16,6 @@ pub enum BettingError {
     MinTokenAmountNotMet = 5,
     #[msg("NotInWindow")]
     NotInWindow = 6,
+    #[msg("NotFound")]
+    NotFound = 7,
 }
