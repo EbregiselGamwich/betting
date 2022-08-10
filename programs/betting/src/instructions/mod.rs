@@ -1,3 +1,4 @@
+pub mod book_bettor_cancel_dispute;
 pub mod book_bettor_dispute;
 pub mod book_bettor_opt_int;
 pub mod book_bettor_place_bet;
@@ -14,6 +15,7 @@ pub mod user_account_close;
 pub mod user_account_init;
 pub mod user_account_shrink;
 
+pub use book_bettor_cancel_dispute::*;
 pub use book_bettor_dispute::*;
 pub use book_bettor_opt_int::*;
 pub use book_bettor_place_bet::*;

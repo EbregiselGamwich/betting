@@ -70,6 +70,9 @@ pub mod betting {
     pub fn book_bettor_dispute(ctx: Context<BookBettorDisputeAccounts>, stake: u64) -> Result<()> {
         instructions::book_bettor_dispute(ctx, stake)
     }
+    pub fn book_bettor_cancel_dispute(ctx: Context<BookBettorCancelDisputeAccounts>) -> Result<()> {
+        instructions::book_bettor_cancel_dispute(ctx)
+    }
     pub fn book_operator_resolve_dispute(
         ctx: Context<BookOperatorResolveDisputeAccounts>,
         bet_outcome: BetOutcome,
