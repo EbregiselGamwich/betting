@@ -5,7 +5,9 @@ pub const OPERATOR_PUBKEY: Pubkey = Pubkey::new_from_array([
     58, 221, 46, 143, 217, 96,
 ]);
 
-pub const RENT_PER_POSITION: u64 = 1224960;
+pub const RENT_PER_POSITION: u64 = 1447680;
 pub const RENT_PER_BET: u64 = 1224960;
+pub const RENT_PER_ORACLE: u64 = 1183200;
 
 pub const MIN_BET_AMOUNT: u64 = 1000000 / 100;
+pub const MIN_ORACLE_STAKE: u64 = 1000000;

@@ -5,17 +5,19 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::{MIN_BET_AMOUNT, RENT_PER_BET},
+    constants::{MIN_ORACLE_STAKE, RENT_PER_ORACLE},
     error::BettingError,
-    state::{BetDirection, Book},
+    state::{user_account::UserAccount, Book, Oracle},
 };
 
 #[derive(Accounts)]
-pub struct BookBettorPlaceBetAccounts<'info> {
+pub struct BookOracleOptInAccounts<'info> {
     #[account(mut)]
-    pub bettor: Signer<'info>,
-    #[account(mut,token::mint=USDC,token::authority=bettor)]
-    pub bettor_token_account: Account<'info, TokenAccount>,
+    pub oracle: Signer<'info>,
+    #[account(mut,seeds=[b"UserAccount".as_ref(),oracle.key().as_ref()],bump)]
+    pub oracle_user_account: Account<'info, UserAccount>,
+    #[account(mut,token::mint=USDC,token::authority=oracle)]
+    pub oracle_token_account: Account<'info, TokenAccount>,
     #[account(mut,seeds=[b"Book".as_ref(),&book_pda.game_id.to_le_bytes(),book_pda.bet_type.try_to_vec().unwrap().as_slice()],bump)]
     pub book_pda: Account<'info, Book>,
     #[account(mut,associated_token::mint=USDC,associated_token::authority=book_pda)]
@@ -24,46 +26,82 @@ pub struct BookBettorPlaceBetAccounts<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn book_bettor_place_bet(
-    ctx: Context<BookBettorPlaceBetAccounts>,
-    odds: u32,
-    wager: u64,
-    bet_direction: BetDirection,
-) -> Result<()> {
-    // check condition
-    require!(
-        ctx.accounts.book_pda.positions.contains_key(ctx.accounts.bettor.key),
-        BettingError::UserDidNotOptIn
-    );
-    require!(wager >= MIN_BET_AMOUNT, BettingError::MinTokenAmountNotMet);
-    // transfer wager
-    let wager_transfer_cpi_context = CpiContext::new(
+pub fn book_oracle_opt_in(ctx: Context<BookOracleOptInAccounts>, stake: u64) -> Result<()> {
+    // check stake
+    require!(stake >= MIN_ORACLE_STAKE, BettingError::MinTokenAmountNotMet);
+    // update user account
+    match ctx
+        .accounts
+        .oracle_user_account
+        .books_oracled
+        .binary_search(&ctx.accounts.book_pda.key())
+    {
+        Ok(_) => {
+            return err!(BettingError::UserAlreadyOptIn);
+        }
+        Err(index) => {
+            // add book pda
+            ctx.accounts
+                .oracle_user_account
+                .books_oracled
+                .insert(index, ctx.accounts.book_pda.key());
+            // check space
+            let user_account_space = ctx.accounts.oracle_user_account.current_space();
+            let oracle_pda_account_info = ctx.accounts.oracle_user_account.to_account_info();
+            if oracle_pda_account_info.data_len() < user_account_space {
+                oracle_pda_account_info.realloc(user_account_space, false)?;
+            }
+            // check rent
+            let min_rent = Rent::get()?.minimum_balance(user_account_space);
+            if oracle_pda_account_info.lamports() < min_rent {
+                let diff = min_rent - oracle_pda_account_info.lamports();
+                let transfer_cpi_context = CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    system_program::Transfer {
+                        from: ctx.accounts.oracle.to_account_info(),
+                        to: ctx.accounts.oracle_user_account.to_account_info(),
+                    },
+                );
+                system_program::transfer(transfer_cpi_context, diff)?;
+            }
+        }
+    }
+    // transfer stake
+    let stake_transfer_cpi_context = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
         anchor_spl::token::Transfer {
-            from: ctx.accounts.bettor_token_account.to_account_info(),
+            from: ctx.accounts.oracle_token_account.to_account_info(),
             to: ctx.accounts.book_ata.to_account_info(),
-            authority: ctx.accounts.bettor.to_account_info(),
+            authority: ctx.accounts.oracle.to_account_info(),
         },
     );
-    anchor_spl::token::transfer(wager_transfer_cpi_context, wager)?;
+    anchor_spl::token::transfer(stake_transfer_cpi_context, stake)?;
     // update book pda
-    ctx.accounts
-        .book_pda
-        .new_bet(odds, wager, ctx.accounts.bettor.key(), bet_direction);
+    match ctx.accounts.book_pda.oracles.get(ctx.accounts.oracle.key) {
+        Some(_) => {
+            return err!(BettingError::UserAlreadyOptIn);
+        }
+        None => {
+            ctx.accounts
+                .book_pda
+                .oracles
+                .insert(ctx.accounts.oracle.key(), Oracle { stake, outcome: None });
 
-    // realloc
-    let book_pda_account_info = ctx.accounts.book_pda.to_account_info();
-    book_pda_account_info.realloc(ctx.accounts.book_pda.current_space(), false)?;
-    // transfer rent for bet
-    let rent_transfer_cpi_context = CpiContext::new(
-        ctx.accounts.system_program.to_account_info(),
-        system_program::Transfer {
-            from: ctx.accounts.bettor.to_account_info(),
-            to: ctx.accounts.book_pda.to_account_info(),
-        },
-    );
-    system_program::transfer(rent_transfer_cpi_context, RENT_PER_BET)?;
-
+            // realloc
+            let book_pda_account_info = ctx.accounts.book_pda.to_account_info();
+            let book_pda_space = ctx.accounts.book_pda.current_space();
+            book_pda_account_info.realloc(book_pda_space, false)?;
+            // rent
+            let transfer_cpi_context = CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.oracle.to_account_info(),
+                    to: ctx.accounts.book_pda.to_account_info(),
+                },
+            );
+            system_program::transfer(transfer_cpi_context, RENT_PER_ORACLE)?;
+        }
+    }
     Ok(())
 }
 
@@ -83,37 +121,57 @@ mod test {
         signature::Keypair, signer::Signer, system_program, transaction::Transaction,
     };
 
-    use crate::state::{BetDirection, BetType, Book, Position};
+    use crate::state::{user_account::UserAccount, BetType, Book, Oracle};
 
     #[tokio::test]
-    async fn test_book_bettor_place_bet_success() {
+    async fn test_book_oracle_opt_in_success() {
         let program_id = crate::id();
         let mut program_test = ProgramTest::new("betting", program_id, None);
 
-        let bettor = Keypair::new();
+        let oracle = Keypair::new();
         program_test.add_account(
-            bettor.pubkey(),
+            oracle.pubkey(),
             Account {
                 lamports: LAMPORTS_PER_SOL,
                 ..Default::default()
             },
         );
 
-        let bettor_ata = anchor_spl::associated_token::get_associated_token_address(&bettor.pubkey(), &USDC);
-        let bettor_ata_state = anchor_spl::token::spl_token::state::Account {
+        let (oracle_pda, _) =
+            Pubkey::find_program_address(&[b"UserAccount".as_ref(), oracle.pubkey().as_ref()], &program_id);
+        let oracle_pda_state = UserAccount {
+            authority: oracle.pubkey(),
+            books_initialized: 0,
+            books_oracled: VecDeque::new(),
+            books_bet_on: VecDeque::new(),
+        };
+        let mut oracle_pda_data: Vec<u8> = Vec::new();
+        oracle_pda_state.try_serialize(&mut oracle_pda_data).unwrap();
+        program_test.add_account(
+            oracle_pda,
+            Account {
+                lamports: Rent::default().minimum_balance(oracle_pda_state.current_space()),
+                data: oracle_pda_data,
+                owner: program_id,
+                ..Default::default()
+            },
+        );
+
+        let oracle_ata = anchor_spl::associated_token::get_associated_token_address(&oracle.pubkey(), &USDC);
+        let oracle_ata_state = anchor_spl::token::spl_token::state::Account {
             mint: USDC,
-            owner: bettor.pubkey(),
+            owner: oracle.pubkey(),
             amount: 1000000 * 100,
             state: anchor_spl::token::spl_token::state::AccountState::Initialized,
             ..Default::default()
         };
-        let mut bettor_ata_data = [0_u8; 165];
-        anchor_spl::token::spl_token::state::Account::pack(bettor_ata_state, &mut bettor_ata_data).unwrap();
+        let mut oracle_ata_data = [0_u8; 165];
+        anchor_spl::token::spl_token::state::Account::pack(oracle_ata_state, &mut oracle_ata_data).unwrap();
         program_test.add_account(
-            bettor_ata,
+            oracle_ata,
             Account {
                 lamports: Rent::default().minimum_balance(165),
-                data: Vec::from(bettor_ata_data),
+                data: Vec::from(oracle_ata_data),
                 owner: anchor_spl::token::ID,
                 ..Default::default()
             },
@@ -144,21 +202,11 @@ mod test {
             oracles: BTreeMap::new(),
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
-            positions: BTreeMap::from([(
-                bettor.pubkey(),
-                Position {
-                    active_bets_count: 0,
-                    bets_count: 0,
-                    payout_for: 0,
-                    payout_against: 0,
-                    wager: 0,
-                    dealt_wager: 0,
-                    dispute_stake: 0,
-                },
-            )]),
+            positions: BTreeMap::new(),
         };
         let mut book_pda_data: Vec<u8> = Vec::new();
         book_pda_state.try_serialize(&mut book_pda_data).unwrap();
+        book_pda_data.resize(book_pda_state.current_space(), 0);
         program_test.add_account(
             book_pda,
             Account {
@@ -199,83 +247,97 @@ mod test {
             anchor_client::RequestNamespace::Global,
         );
         let instructions = rb
-            .signer(&bettor)
-            .accounts(crate::accounts::BookBettorPlaceBetAccounts {
-                bettor: bettor.pubkey(),
-                bettor_token_account: bettor_ata,
+            .signer(&oracle)
+            .accounts(crate::accounts::BookOracleOptInAccounts {
+                oracle: oracle.pubkey(),
+                oracle_user_account: oracle_pda,
+                oracle_token_account: oracle_ata,
                 book_pda,
                 book_ata,
                 token_program: anchor_spl::token::ID,
                 system_program: system_program::id(),
             })
-            .args(crate::instruction::BookBettorPlaceBet {
-                odds: 1200,
-                wager: 1000000 * 20,
-                bet_direction: BetDirection::For,
-            })
+            .args(crate::instruction::BookOracleOptIn { stake: 1000000 * 20 })
             .instructions()
             .unwrap();
         let tx = Transaction::new_signed_with_payer(
             &instructions,
             Some(&payer.pubkey()),
-            &[&payer, &bettor],
+            &[&payer, &oracle],
             recent_blockhash,
         );
         banks_client.process_transaction(tx).await.unwrap();
 
-        // wager should be transferred  out from the bettor token account
-        let bettor_token_account_state: anchor_spl::token::spl_token::state::Account =
-            banks_client.get_packed_account_data(bettor_ata).await.unwrap();
-        assert_eq!(bettor_token_account_state.amount, 1000000 * 80);
-        // book pda should be updated
+        // the book pda should be saved to the oracle user account
+        let user_account = banks_client.get_account(oracle_pda).await.unwrap().unwrap();
+        let user_account_state = UserAccount::try_deserialize(&mut user_account.data.as_slice()).unwrap();
+        assert!(user_account_state.books_oracled.contains(&book_pda));
+        // oracle stake should be transferred from the oracle token account
+        let user_token_account_state: anchor_spl::token::spl_token::state::Account =
+            banks_client.get_packed_account_data(oracle_ata).await.unwrap();
+        assert_eq!(user_token_account_state.amount, 1000000 * 80);
+        // the book pda should be updated
         let book_account = banks_client.get_account(book_pda).await.unwrap().unwrap();
         let book_state = Book::try_deserialize(&mut book_account.data.as_slice()).unwrap();
-        assert_eq!(book_state.bets_count, 1);
-        assert_eq!(book_state.wager_total, 1000000 * 20);
-        assert_eq!(book_state.bets_for.len(), 1);
-        assert_eq!(book_state.bets_for[0].bettor, bettor.pubkey());
-        assert_eq!(book_state.bets_for[0].bettor, bettor.pubkey());
-        assert_eq!(book_state.bets_for[0].odds(), 1200);
-        assert_eq!(book_state.bets_for[0].wager, 1000000 * 20);
-        assert_eq!(book_state.positions[&bettor.pubkey()].active_bets_count, 1);
-        assert_eq!(book_state.positions[&bettor.pubkey()].bets_count, 1);
-        assert_eq!(book_state.positions[&bettor.pubkey()].wager, 1000000 * 20);
-        // wager should be transferred to the book ata
-        let book_ata_account_state: anchor_spl::token::spl_token::state::Account =
+        assert!(book_state.oracles.contains_key(&oracle.pubkey()));
+        assert!(book_state.oracles[&oracle.pubkey()].outcome.is_none());
+        assert_eq!(book_state.oracles[&oracle.pubkey()].stake, 1000000 * 20);
+        // the stake should be transferred to the book ata
+        let book_token_account_state: anchor_spl::token::spl_token::state::Account =
             banks_client.get_packed_account_data(book_ata).await.unwrap();
-        assert_eq!(book_ata_account_state.amount, 1000000 * 20);
+        assert_eq!(book_token_account_state.amount, 1000000 * 20);
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Custom(6004)")]
-    async fn test_book_bettor_place_bet_err_user_did_not_opt_in() {
+    #[should_panic(expected = "Custom(6005")]
+    async fn test_book_oracle_opt_in_err_min_stake_not_met() {
         let program_id = crate::id();
         let mut program_test = ProgramTest::new("betting", program_id, None);
 
-        let bettor = Keypair::new();
+        let oracle = Keypair::new();
         program_test.add_account(
-            bettor.pubkey(),
+            oracle.pubkey(),
             Account {
                 lamports: LAMPORTS_PER_SOL,
                 ..Default::default()
             },
         );
 
-        let bettor_ata = anchor_spl::associated_token::get_associated_token_address(&bettor.pubkey(), &USDC);
-        let bettor_ata_state = anchor_spl::token::spl_token::state::Account {
+        let (oracle_pda, _) =
+            Pubkey::find_program_address(&[b"UserAccount".as_ref(), oracle.pubkey().as_ref()], &program_id);
+        let oracle_pda_state = UserAccount {
+            authority: oracle.pubkey(),
+            books_initialized: 0,
+            books_oracled: VecDeque::new(),
+            books_bet_on: VecDeque::new(),
+        };
+        let mut oracle_pda_data: Vec<u8> = Vec::new();
+        oracle_pda_state.try_serialize(&mut oracle_pda_data).unwrap();
+        program_test.add_account(
+            oracle_pda,
+            Account {
+                lamports: Rent::default().minimum_balance(oracle_pda_state.current_space()),
+                data: oracle_pda_data,
+                owner: program_id,
+                ..Default::default()
+            },
+        );
+
+        let oracle_ata = anchor_spl::associated_token::get_associated_token_address(&oracle.pubkey(), &USDC);
+        let oracle_ata_state = anchor_spl::token::spl_token::state::Account {
             mint: USDC,
-            owner: bettor.pubkey(),
+            owner: oracle.pubkey(),
             amount: 1000000 * 100,
             state: anchor_spl::token::spl_token::state::AccountState::Initialized,
             ..Default::default()
         };
-        let mut bettor_ata_data = [0_u8; 165];
-        anchor_spl::token::spl_token::state::Account::pack(bettor_ata_state, &mut bettor_ata_data).unwrap();
+        let mut oracle_ata_data = [0_u8; 165];
+        anchor_spl::token::spl_token::state::Account::pack(oracle_ata_state, &mut oracle_ata_data).unwrap();
         program_test.add_account(
-            bettor_ata,
+            oracle_ata,
             Account {
                 lamports: Rent::default().minimum_balance(165),
-                data: Vec::from(bettor_ata_data),
+                data: Vec::from(oracle_ata_data),
                 owner: anchor_spl::token::ID,
                 ..Default::default()
             },
@@ -306,10 +368,11 @@ mod test {
             oracles: BTreeMap::new(),
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
-            positions: BTreeMap::from([]),
+            positions: BTreeMap::new(),
         };
         let mut book_pda_data: Vec<u8> = Vec::new();
         book_pda_state.try_serialize(&mut book_pda_data).unwrap();
+        book_pda_data.resize(book_pda_state.current_space(), 0);
         program_test.add_account(
             book_pda,
             Account {
@@ -350,83 +413,77 @@ mod test {
             anchor_client::RequestNamespace::Global,
         );
         let instructions = rb
-            .signer(&bettor)
-            .accounts(crate::accounts::BookBettorPlaceBetAccounts {
-                bettor: bettor.pubkey(),
-                bettor_token_account: bettor_ata,
+            .signer(&oracle)
+            .accounts(crate::accounts::BookOracleOptInAccounts {
+                oracle: oracle.pubkey(),
+                oracle_user_account: oracle_pda,
+                oracle_token_account: oracle_ata,
                 book_pda,
                 book_ata,
                 token_program: anchor_spl::token::ID,
                 system_program: system_program::id(),
             })
-            .args(crate::instruction::BookBettorPlaceBet {
-                odds: 1200,
-                wager: 1000000 * 20,
-                bet_direction: BetDirection::For,
-            })
+            .args(crate::instruction::BookOracleOptIn { stake: 20 })
             .instructions()
             .unwrap();
         let tx = Transaction::new_signed_with_payer(
             &instructions,
             Some(&payer.pubkey()),
-            &[&payer, &bettor],
+            &[&payer, &oracle],
             recent_blockhash,
         );
         banks_client.process_transaction(tx).await.unwrap();
 
-        // wager should be transferred  out from the bettor token account
-        let bettor_token_account_state: anchor_spl::token::spl_token::state::Account =
-            banks_client.get_packed_account_data(bettor_ata).await.unwrap();
-        assert_eq!(bettor_token_account_state.amount, 1000000 * 80);
-        // book pda should be updated
+        // the book pda should be saved to the oracle user account
+        let user_account = banks_client.get_account(oracle_pda).await.unwrap().unwrap();
+        let user_account_state = UserAccount::try_deserialize(&mut user_account.data.as_slice()).unwrap();
+        assert!(user_account_state.books_oracled.contains(&book_pda));
+        // oracle stake should be transferred from the oracle token account
+        let user_token_account_state: anchor_spl::token::spl_token::state::Account =
+            banks_client.get_packed_account_data(oracle_ata).await.unwrap();
+        assert_eq!(user_token_account_state.amount, 1000000 * 80);
+        // the book pda should be updated
         let book_account = banks_client.get_account(book_pda).await.unwrap().unwrap();
         let book_state = Book::try_deserialize(&mut book_account.data.as_slice()).unwrap();
-        assert_eq!(book_state.bets_count, 1);
-        assert_eq!(book_state.wager_total, 1000000 * 20);
-        assert_eq!(book_state.bets_for.len(), 1);
-        assert_eq!(book_state.bets_for[0].bettor, bettor.pubkey());
-        assert_eq!(book_state.bets_for[0].bettor, bettor.pubkey());
-        assert_eq!(book_state.bets_for[0].odds(), 1200);
-        assert_eq!(book_state.bets_for[0].wager, 1000000 * 20);
-        assert_eq!(book_state.positions[&bettor.pubkey()].active_bets_count, 1);
-        assert_eq!(book_state.positions[&bettor.pubkey()].bets_count, 1);
-        assert_eq!(book_state.positions[&bettor.pubkey()].wager, 1000000 * 20);
-        // wager should be transferred to the book ata
-        let book_ata_account_state: anchor_spl::token::spl_token::state::Account =
+        assert!(book_state.oracles.contains_key(&oracle.pubkey()));
+        assert!(book_state.oracles[&oracle.pubkey()].outcome.is_none());
+        assert_eq!(book_state.oracles[&oracle.pubkey()].stake, 1000000 * 20);
+        // the stake should be transferred to the book ata
+        let book_token_account_state: anchor_spl::token::spl_token::state::Account =
             banks_client.get_packed_account_data(book_ata).await.unwrap();
-        assert_eq!(book_ata_account_state.amount, 1000000 * 20);
+        assert_eq!(book_token_account_state.amount, 1000000 * 20);
     }
 
     #[tokio::test]
-    #[should_panic(expected = "Custom(6005)")]
-    async fn test_book_bettor_place_bet_err_wager_too_low() {
+    #[should_panic(expected = "Custom(6003)")]
+    async fn test_book_oracle_opt_in_err_already_opt_in() {
         let program_id = crate::id();
         let mut program_test = ProgramTest::new("betting", program_id, None);
 
-        let bettor = Keypair::new();
+        let oracle = Keypair::new();
         program_test.add_account(
-            bettor.pubkey(),
+            oracle.pubkey(),
             Account {
                 lamports: LAMPORTS_PER_SOL,
                 ..Default::default()
             },
         );
 
-        let bettor_ata = anchor_spl::associated_token::get_associated_token_address(&bettor.pubkey(), &USDC);
-        let bettor_ata_state = anchor_spl::token::spl_token::state::Account {
+        let oracle_ata = anchor_spl::associated_token::get_associated_token_address(&oracle.pubkey(), &USDC);
+        let oracle_ata_state = anchor_spl::token::spl_token::state::Account {
             mint: USDC,
-            owner: bettor.pubkey(),
+            owner: oracle.pubkey(),
             amount: 1000000 * 100,
             state: anchor_spl::token::spl_token::state::AccountState::Initialized,
             ..Default::default()
         };
-        let mut bettor_ata_data = [0_u8; 165];
-        anchor_spl::token::spl_token::state::Account::pack(bettor_ata_state, &mut bettor_ata_data).unwrap();
+        let mut oracle_ata_data = [0_u8; 165];
+        anchor_spl::token::spl_token::state::Account::pack(oracle_ata_state, &mut oracle_ata_data).unwrap();
         program_test.add_account(
-            bettor_ata,
+            oracle_ata,
             Account {
                 lamports: Rent::default().minimum_balance(165),
-                data: Vec::from(bettor_ata_data),
+                data: Vec::from(oracle_ata_data),
                 owner: anchor_spl::token::ID,
                 ..Default::default()
             },
@@ -442,7 +499,7 @@ mod test {
             ],
             &program_id,
         );
-        let book_pda_state = Book {
+        let mut book_pda_state = Book {
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -457,21 +514,18 @@ mod test {
             oracles: BTreeMap::new(),
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
-            positions: BTreeMap::from([(
-                bettor.pubkey(),
-                Position {
-                    active_bets_count: 0,
-                    bets_count: 0,
-                    payout_for: 0,
-                    payout_against: 0,
-                    wager: 0,
-                    dealt_wager: 0,
-                    dispute_stake: 0,
-                },
-            )]),
+            positions: BTreeMap::new(),
         };
+        book_pda_state.oracles.insert(
+            oracle.pubkey(),
+            Oracle {
+                stake: 1000000 * 10,
+                outcome: None,
+            },
+        );
         let mut book_pda_data: Vec<u8> = Vec::new();
         book_pda_state.try_serialize(&mut book_pda_data).unwrap();
+        book_pda_data.resize(book_pda_state.current_space(), 0);
         program_test.add_account(
             book_pda,
             Account {
@@ -482,11 +536,30 @@ mod test {
             },
         );
 
+        let (oracle_pda, _) =
+            Pubkey::find_program_address(&[b"UserAccount".as_ref(), oracle.pubkey().as_ref()], &program_id);
+        let oracle_pda_state = UserAccount {
+            authority: oracle.pubkey(),
+            books_initialized: 0,
+            books_oracled: VecDeque::from(vec![book_pda]),
+            books_bet_on: VecDeque::new(),
+        };
+        let mut oracle_pda_data: Vec<u8> = Vec::new();
+        oracle_pda_state.try_serialize(&mut oracle_pda_data).unwrap();
+        program_test.add_account(
+            oracle_pda,
+            Account {
+                lamports: Rent::default().minimum_balance(oracle_pda_state.current_space()),
+                data: oracle_pda_data,
+                owner: program_id,
+                ..Default::default()
+            },
+        );
         let book_ata = anchor_spl::associated_token::get_associated_token_address(&book_pda, &USDC);
         let book_ata_state = anchor_spl::token::spl_token::state::Account {
             mint: USDC,
             owner: book_pda,
-            amount: 0,
+            amount: 1000000 * 10,
             state: anchor_spl::token::spl_token::state::AccountState::Initialized,
             ..Default::default()
         };
@@ -512,50 +585,44 @@ mod test {
             anchor_client::RequestNamespace::Global,
         );
         let instructions = rb
-            .signer(&bettor)
-            .accounts(crate::accounts::BookBettorPlaceBetAccounts {
-                bettor: bettor.pubkey(),
-                bettor_token_account: bettor_ata,
+            .signer(&oracle)
+            .accounts(crate::accounts::BookOracleOptInAccounts {
+                oracle: oracle.pubkey(),
+                oracle_user_account: oracle_pda,
+                oracle_token_account: oracle_ata,
                 book_pda,
                 book_ata,
                 token_program: anchor_spl::token::ID,
                 system_program: system_program::id(),
             })
-            .args(crate::instruction::BookBettorPlaceBet {
-                odds: 1200,
-                wager: 20,
-                bet_direction: BetDirection::For,
-            })
+            .args(crate::instruction::BookOracleOptIn { stake: 1000000 * 20 })
             .instructions()
             .unwrap();
         let tx = Transaction::new_signed_with_payer(
             &instructions,
             Some(&payer.pubkey()),
-            &[&payer, &bettor],
+            &[&payer, &oracle],
             recent_blockhash,
         );
         banks_client.process_transaction(tx).await.unwrap();
 
-        // wager should be transferred  out from the bettor token account
-        let bettor_token_account_state: anchor_spl::token::spl_token::state::Account =
-            banks_client.get_packed_account_data(bettor_ata).await.unwrap();
-        assert_eq!(bettor_token_account_state.amount, 1000000 * 80);
-        // book pda should be updated
+        // the book pda should be saved to the oracle user account
+        let user_account = banks_client.get_account(oracle_pda).await.unwrap().unwrap();
+        let user_account_state = UserAccount::try_deserialize(&mut user_account.data.as_slice()).unwrap();
+        assert!(user_account_state.books_oracled.contains(&book_pda));
+        // oracle stake should be transferred from the oracle token account
+        let user_token_account_state: anchor_spl::token::spl_token::state::Account =
+            banks_client.get_packed_account_data(oracle_ata).await.unwrap();
+        assert_eq!(user_token_account_state.amount, 1000000 * 80);
+        // the book pda should be updated
         let book_account = banks_client.get_account(book_pda).await.unwrap().unwrap();
         let book_state = Book::try_deserialize(&mut book_account.data.as_slice()).unwrap();
-        assert_eq!(book_state.bets_count, 1);
-        assert_eq!(book_state.wager_total, 1000000 * 20);
-        assert_eq!(book_state.bets_for.len(), 1);
-        assert_eq!(book_state.bets_for[0].bettor, bettor.pubkey());
-        assert_eq!(book_state.bets_for[0].bettor, bettor.pubkey());
-        assert_eq!(book_state.bets_for[0].odds(), 1200);
-        assert_eq!(book_state.bets_for[0].wager, 1000000 * 20);
-        assert_eq!(book_state.positions[&bettor.pubkey()].active_bets_count, 1);
-        assert_eq!(book_state.positions[&bettor.pubkey()].bets_count, 1);
-        assert_eq!(book_state.positions[&bettor.pubkey()].wager, 1000000 * 20);
-        // wager should be transferred to the book ata
-        let book_ata_account_state: anchor_spl::token::spl_token::state::Account =
+        assert!(book_state.oracles.contains_key(&oracle.pubkey()));
+        assert!(book_state.oracles[&oracle.pubkey()].outcome.is_none());
+        assert_eq!(book_state.oracles[&oracle.pubkey()].stake, 1000000 * 20);
+        // the stake should be transferred to the book ata
+        let book_token_account_state: anchor_spl::token::spl_token::state::Account =
             banks_client.get_packed_account_data(book_ata).await.unwrap();
-        assert_eq!(book_ata_account_state.amount, 1000000 * 20);
+        assert_eq!(book_token_account_state.amount, 1000000 * 20);
     }
 }

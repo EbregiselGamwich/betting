@@ -55,4 +55,7 @@ pub mod betting {
     pub fn book_match_bets(ctx: Context<BookMatchBetsAccounts>) -> Result<()> {
         instructions::book_match_bets(ctx)
     }
+    pub fn book_oracle_opt_in(ctx: Context<BookOracleOptInAccounts>, stake: u64) -> Result<()> {
+        instructions::book_oracle_opt_in(ctx, stake)
+    }
 }

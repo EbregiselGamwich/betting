@@ -12,6 +12,6 @@ pub enum BettingError {
     UserAlreadyOptIn = 3,
     #[msg("UserDidNotOptIn")]
     UserDidNotOptIn = 4,
-    #[msg("MinBetAmountNotMet")]
-    MinBetAmountNotMet = 5,
+    #[msg("MinTokenAmountNotMet")]
+    MinTokenAmountNotMet = 5,
 }
