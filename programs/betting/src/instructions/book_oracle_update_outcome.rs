@@ -22,7 +22,7 @@ pub fn book_oracle_update_outcome(
     require!(
         ctx.accounts.book_pda.concluded_at.is_none()
             || ctx.accounts.book_pda.concluded_at.unwrap() + ORACLE_UPDATE_WINDOW > now,
-        BettingError::WindowPassed
+        BettingError::NotInWindow
     );
     // update oracle
     match ctx.accounts.book_pda.oracles.get_mut(ctx.accounts.oracle.key) {

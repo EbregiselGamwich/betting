@@ -67,4 +67,7 @@ pub mod betting {
     ) -> Result<()> {
         instructions::book_oracle_update_outcome(ctx, bet_outcome)
     }
+    pub fn book_bettor_dispute(ctx: Context<BookBettorDisputeAccounts>, stake: u64) -> Result<()> {
+        instructions::book_bettor_dispute(ctx, stake)
+    }
 }
