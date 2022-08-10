@@ -1,7 +1,7 @@
 use anchor_lang::{prelude::*, system_program};
 
 use crate::{
-    constants::RENT_PER_POSITION,
+    constants::{ORACLE_UPDATE_WINDOW, RENT_PER_POSITION},
     error::BettingError,
     state::{user_account::UserAccount, Book, Position},
 };
@@ -18,6 +18,13 @@ pub struct BookBettorOptInAccounts<'info> {
 }
 
 pub fn book_bettor_opt_int(ctx: Context<BookBettorOptInAccounts>) -> Result<()> {
+    // check window
+    let now = Clock::get()?.unix_timestamp;
+    require!(
+        ctx.accounts.book_pda.concluded_at.is_none()
+            || ctx.accounts.book_pda.concluded_at.unwrap() + ORACLE_UPDATE_WINDOW > now,
+        BettingError::NotInWindow
+    );
     // update bettor user account
     match ctx
         .accounts
@@ -159,7 +166,7 @@ mod test {
             bet_type,
             total_dispute_stake: 0,
             dispute_resolution_result: None,
-            concluded_at: Some(0),
+            concluded_at: None,
             oracles: BTreeMap::new(),
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
@@ -251,7 +258,7 @@ mod test {
             bet_type,
             total_dispute_stake: 0,
             dispute_resolution_result: None,
-            concluded_at: Some(0),
+            concluded_at: None,
             oracles: BTreeMap::new(),
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
@@ -295,6 +302,118 @@ mod test {
             Account {
                 lamports: Rent::default().minimum_balance(bettor_pda_state.current_space()),
                 data: bettor_pda_data,
+                owner: program_id,
+                ..Default::default()
+            },
+        );
+
+        let (mut banks_client, payer, recent_blockhash) = program_test.start().await;
+
+        let rb = RequestBuilder::from(
+            program_id,
+            "",
+            Rc::new(Keypair::new()),
+            None,
+            anchor_client::RequestNamespace::Global,
+        );
+        let instructions = rb
+            .signer(&bettor)
+            .accounts(crate::accounts::BookBettorOptInAccounts {
+                bettor: bettor.pubkey(),
+                bettor_user_account: bettor_pda,
+                book_pda,
+                system_program: system_program::id(),
+            })
+            .args(crate::instruction::BookBettorOptInt)
+            .instructions()
+            .unwrap();
+        let tx = Transaction::new_signed_with_payer(
+            &instructions,
+            Some(&payer.pubkey()),
+            &[&payer, &bettor],
+            recent_blockhash,
+        );
+        banks_client.process_transaction(tx).await.unwrap();
+
+        // the book pda should be added to the bettor user account
+        let bettor_user_account = banks_client.get_account(bettor_pda).await.unwrap().unwrap();
+        let bettor_user_account_state = UserAccount::try_deserialize(&mut bettor_user_account.data.as_slice()).unwrap();
+        assert!(bettor_user_account_state.books_bet_on.contains(&book_pda));
+        // a position should be created in the book pda account
+        let book_account = banks_client.get_account(book_pda).await.unwrap().unwrap();
+        let book_state = Book::try_deserialize(&mut book_account.data.as_slice()).unwrap();
+        assert!(book_state.positions.contains_key(&bettor.pubkey()));
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Custom(6006)")]
+    async fn test_book_bettor_opt_in_err_opt_in_after_conclusion() {
+        let program_id = crate::id();
+        let mut program_test = ProgramTest::new("betting", program_id, None);
+
+        let bettor = Keypair::new();
+        program_test.add_account(
+            bettor.pubkey(),
+            Account {
+                lamports: LAMPORTS_PER_SOL,
+                ..Default::default()
+            },
+        );
+
+        let (bettor_pda, _) =
+            Pubkey::find_program_address(&[b"UserAccount".as_ref(), bettor.pubkey().as_ref()], &program_id);
+        let bettor_pda_state = UserAccount {
+            authority: bettor.pubkey(),
+            books_initialized: 0,
+            books_oracled: VecDeque::new(),
+            books_bet_on: VecDeque::new(),
+        };
+        let mut bettor_pda_data: Vec<u8> = Vec::new();
+        bettor_pda_state.try_serialize(&mut bettor_pda_data).unwrap();
+        program_test.add_account(
+            bettor_pda,
+            Account {
+                lamports: Rent::default().minimum_balance(bettor_pda_state.current_space()),
+                data: bettor_pda_data,
+                owner: program_id,
+                ..Default::default()
+            },
+        );
+
+        let game_id = 1_u32;
+        let bet_type = BetType::One { handicap: 0 };
+        let (book_pda, _) = Pubkey::find_program_address(
+            &[
+                b"Book".as_ref(),
+                &game_id.to_le_bytes(),
+                bet_type.try_to_vec().unwrap().as_slice(),
+            ],
+            &program_id,
+        );
+        let book_pda_state = Book {
+            game_id,
+            initiator: Pubkey::new_unique(),
+            bets_count: 0,
+            wager_total: 0,
+            payout_for_total: 0,
+            payout_against_total: 0,
+            dealt_wager: 0,
+            bet_type,
+            total_dispute_stake: 0,
+            dispute_resolution_result: None,
+            concluded_at: Some(0),
+            oracles: BTreeMap::new(),
+            bets_for: VecDeque::new(),
+            bets_against: VecDeque::new(),
+            positions: BTreeMap::new(),
+        };
+        let mut book_pda_data: Vec<u8> = Vec::new();
+        book_pda_state.try_serialize(&mut book_pda_data).unwrap();
+        program_test.add_account(
+            book_pda,
+            Account {
+                lamports: Rent::default().minimum_balance(book_pda_state.current_space()),
+                data: book_pda_data,
                 owner: program_id,
                 ..Default::default()
             },
