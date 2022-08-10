@@ -226,7 +226,7 @@ pub enum BetOutcome {
     Against,
 }
 impl BetOutcome {
-    pub const INIT_SPACE: usize = 1;
+    pub const INIT_SPACE: usize = 2;
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
