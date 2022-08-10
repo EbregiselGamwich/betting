@@ -32,6 +32,18 @@ impl Book {
             + Bet::INIT_SPACE * (self.bets_for.len() + self.bets_against.len())
             + (32 + Position::INIT_SPACE) * self.positions.len()
     }
+    pub fn aggregated_outcome(&self) -> Option<BetOutcome> {
+        let mut map: BTreeMap<Option<BetOutcome>, u64> = BTreeMap::new();
+
+        for o in self.oracles.values() {
+            *map.entry(o.outcome).or_insert(0) += o.stake;
+        }
+
+        let mut vec = Vec::from_iter(map);
+        vec.sort_by_key(|kv| kv.1);
+
+        vec[vec.len() - 1].0
+    }
     pub fn new_bet(&mut self, odds: u32, wager: u64, bettor: Pubkey, bet_direction: BetDirection) {
         let mut id = [0_u8; 8];
         id[0..4].copy_from_slice(self.bets_count.to_le_bytes().as_slice());
@@ -207,7 +219,7 @@ pub enum BetType {
 impl BetType {
     pub const INIT_SPACE: usize = 1;
 }
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BetOutcome {
     For,
     Cancel,
