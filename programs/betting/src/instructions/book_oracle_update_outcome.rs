@@ -89,6 +89,7 @@ mod test {
             &program_id,
         );
         let mut book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -187,6 +188,7 @@ mod test {
             &program_id,
         );
         let mut book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -285,6 +287,7 @@ mod test {
             &program_id,
         );
         let mut book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,

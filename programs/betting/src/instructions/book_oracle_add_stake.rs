@@ -38,6 +38,7 @@ pub fn book_oracle_add_stake(ctx: Context<BookOracleAddStakeAccounts>, stake: u6
     anchor_spl::token::transfer(stake_transfer_cpi_context, stake)?;
 
     // update book pda
+    ctx.accounts.book_pda.total_oracle_stake += stake;
     match ctx.accounts.book_pda.oracles.get_mut(ctx.accounts.oracle.key) {
         Some(o) => {
             o.stake += stake;
@@ -113,6 +114,7 @@ mod test {
             &program_id,
         );
         let mut book_pda_state = Book {
+            total_oracle_stake: 1000000 * 100,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -207,6 +209,7 @@ mod test {
         let book_account = banks_client.get_account(book_pda).await.unwrap().unwrap();
         let book_state = Book::try_deserialize(&mut book_account.data.as_slice()).unwrap();
         assert_eq!(book_state.oracles[&oracle.pubkey()].stake, 1000000 * 120);
+        assert_eq!(book_state.total_oracle_stake, 1000000 * 120);
         // stake should be transferred to the book ata
         let book_token_account_state: anchor_spl::token::spl_token::state::Account =
             banks_client.get_packed_account_data(book_ata).await.unwrap();
@@ -259,6 +262,7 @@ mod test {
             &program_id,
         );
         let book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -398,6 +402,7 @@ mod test {
             &program_id,
         );
         let mut book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,

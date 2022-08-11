@@ -16,6 +16,7 @@ pub struct Book {
     pub dealt_wager: u64,
     pub bet_type: BetType,
     pub total_dispute_stake: u64,
+    pub total_oracle_stake: u64,
     pub dispute_resolution_result: Option<BetOutcome>,
     pub concluded_at: Option<i64>,
     pub aggregated_oracle_outcome: Option<BetOutcome>,
@@ -34,6 +35,7 @@ impl Book {
         + 8
         + 8
         + BetType::INIT_SPACE
+        + 8
         + 8
         + 1
         + BetOutcome::INIT_SPACE
@@ -312,6 +314,7 @@ mod test {
     #[test]
     fn test_state_book_init_space() {
         let book = Book {
+            total_oracle_stake: 0,
             game_id: 1,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -336,6 +339,7 @@ mod test {
     #[test]
     fn test_state_book_current_space() {
         let mut book = Book {
+            total_oracle_stake: 0,
             game_id: 1,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -381,6 +385,7 @@ mod test {
     #[test]
     fn test_state_book_new_bet() {
         let mut book = Book {
+            total_oracle_stake: 0,
             game_id: 1,
             initiator: Pubkey::new_unique(),
             bets_count: 0,

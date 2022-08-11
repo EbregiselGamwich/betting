@@ -93,6 +93,7 @@ pub fn book_oracle_opt_in(ctx: Context<BookOracleOptInAccounts>, stake: u64) -> 
                 .book_pda
                 .oracles
                 .insert(ctx.accounts.oracle.key(), Oracle { stake, outcome: None });
+            ctx.accounts.book_pda.total_oracle_stake += stake;
 
             // realloc
             let book_pda_account_info = ctx.accounts.book_pda.to_account_info();
@@ -195,6 +196,7 @@ mod test {
             &program_id,
         );
         let book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -290,6 +292,7 @@ mod test {
         assert!(book_state.oracles.contains_key(&oracle.pubkey()));
         assert!(book_state.oracles[&oracle.pubkey()].outcome.is_none());
         assert_eq!(book_state.oracles[&oracle.pubkey()].stake, 1000000 * 20);
+        assert_eq!(book_state.total_oracle_stake, 1000000 * 20);
         // the stake should be transferred to the book ata
         let book_token_account_state: anchor_spl::token::spl_token::state::Account =
             banks_client.get_packed_account_data(book_ata).await.unwrap();
@@ -362,6 +365,7 @@ mod test {
             &program_id,
         );
         let book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
@@ -510,6 +514,7 @@ mod test {
         );
         let mut book_pda_state = Book {
             game_id,
+            total_oracle_stake: 0,
             initiator: Pubkey::new_unique(),
             bets_count: 0,
             wager_total: 0,
@@ -702,6 +707,7 @@ mod test {
             &program_id,
         );
         let book_pda_state = Book {
+            total_oracle_stake: 0,
             game_id,
             initiator: Pubkey::new_unique(),
             bets_count: 0,

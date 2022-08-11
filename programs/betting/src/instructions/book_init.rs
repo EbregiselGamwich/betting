@@ -37,6 +37,7 @@ pub fn book_init(ctx: Context<BookInitAccounts>, bet_type: BetType) -> Result<()
     ctx.accounts.game_pda.books_count += 1;
     // init book pda
     ctx.accounts.book_pda.set_inner(Book {
+        total_oracle_stake: 0,
         game_id: ctx.accounts.game_pda.game_id,
         initiator: ctx.accounts.initiator.key(),
         bets_count: 0,
