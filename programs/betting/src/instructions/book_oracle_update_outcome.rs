@@ -34,11 +34,15 @@ pub fn book_oracle_update_outcome(
         }
     }
     // update book pda
-    ctx.accounts.book_pda.concluded_at = if ctx.accounts.book_pda.aggregated_outcome().is_some() {
-        Some(now)
-    } else {
-        None
-    };
+    let aggregated_outcome = ctx.accounts.book_pda.aggregated_outcome();
+    if ctx.accounts.book_pda.aggregated_oracle_outcome != aggregated_outcome {
+        ctx.accounts.book_pda.aggregated_oracle_outcome = aggregated_outcome;
+        if aggregated_outcome.is_some() {
+            ctx.accounts.book_pda.concluded_at = Some(now);
+        } else {
+            ctx.accounts.book_pda.concluded_at = None;
+        }
+    }
 
     Ok(())
 }
@@ -100,6 +104,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         book_pda_state.oracles.insert(
             oracle.pubkey(),
@@ -197,6 +202,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         book_pda_state.oracles.insert(
             oracle.pubkey(),
@@ -294,6 +300,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         book_pda_state.oracles.insert(
             Pubkey::new_unique(),

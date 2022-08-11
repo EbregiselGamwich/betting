@@ -168,6 +168,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         let mut book_pda_data: Vec<u8> = Vec::new();
         book_pda_state.try_serialize(&mut book_pda_data).unwrap();
@@ -340,6 +341,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         let mut book_pda_data: Vec<u8> = Vec::new();
         book_pda_state.try_serialize(&mut book_pda_data).unwrap();
@@ -512,6 +514,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         let mut book_pda_data: Vec<u8> = Vec::new();
         book_pda_state.try_serialize(&mut book_pda_data).unwrap();

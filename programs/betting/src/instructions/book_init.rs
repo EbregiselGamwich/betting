@@ -52,6 +52,7 @@ pub fn book_init(ctx: Context<BookInitAccounts>, bet_type: BetType) -> Result<()
         bets_for: VecDeque::new(),
         bets_against: VecDeque::new(),
         positions: BTreeMap::new(),
+        aggregated_oracle_outcome: None,
     });
 
     Ok(())

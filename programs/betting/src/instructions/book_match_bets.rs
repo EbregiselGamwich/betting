@@ -68,6 +68,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         let bettor_key = Pubkey::new_unique();
         book_pda_state.positions.insert(
@@ -165,6 +166,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         let bettor_key = Pubkey::new_unique();
         book_pda_state.positions.insert(

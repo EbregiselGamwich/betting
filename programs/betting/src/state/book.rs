@@ -18,14 +18,33 @@ pub struct Book {
     pub total_dispute_stake: u64,
     pub dispute_resolution_result: Option<BetOutcome>,
     pub concluded_at: Option<i64>,
+    pub aggregated_oracle_outcome: Option<BetOutcome>,
     pub oracles: BTreeMap<Pubkey, Oracle>,
     pub bets_for: VecDeque<Bet>,
     pub bets_against: VecDeque<Bet>,
     pub positions: BTreeMap<Pubkey, Position>,
 }
 impl Book {
-    pub const INIT_SPACE: usize =
-        8 + 4 + 32 + 4 + 8 + 8 + 8 + 8 + BetType::INIT_SPACE + 8 + 1 + BetOutcome::INIT_SPACE + 1 + 8 + 4 + 4 + 4 + 4;
+    pub const INIT_SPACE: usize = 8
+        + 4
+        + 32
+        + 4
+        + 8
+        + 8
+        + 8
+        + 8
+        + BetType::INIT_SPACE
+        + 8
+        + 1
+        + BetOutcome::INIT_SPACE
+        + 1
+        + 8
+        + 1
+        + BetOutcome::INIT_SPACE
+        + 4
+        + 4
+        + 4
+        + 4;
     pub fn current_space(&self) -> usize {
         Self::INIT_SPACE
             + (32 + Oracle::INIT_SPACE) * self.oracles.len()
@@ -308,6 +327,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         let mut book_data: Vec<u8> = Vec::new();
         book.try_serialize(&mut book_data).unwrap();
@@ -331,6 +351,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
         book.oracles.insert(
             Pubkey::new_unique(),
@@ -375,6 +396,7 @@ mod test {
             bets_for: VecDeque::new(),
             bets_against: VecDeque::new(),
             positions: BTreeMap::new(),
+            aggregated_oracle_outcome: None,
         };
 
         let bettor_key = Pubkey::new_unique();
