@@ -92,4 +92,7 @@ pub mod betting {
     pub fn book_oracle_settle(ctx: Context<BookOracleSettleAccounts>) -> Result<()> {
         instructions::book_oracle_settle(ctx)
     }
+    pub fn book_initiator_settle(ctx: Context<BookInitiatorSettleAccounts>) -> Result<()> {
+        instructions::book_initiator_settle(ctx)
+    }
 }
