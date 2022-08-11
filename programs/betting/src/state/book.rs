@@ -33,16 +33,20 @@ impl Book {
             + (32 + Position::INIT_SPACE) * self.positions.len()
     }
     pub fn aggregated_outcome(&self) -> Option<BetOutcome> {
-        let mut map: BTreeMap<Option<BetOutcome>, u64> = BTreeMap::new();
+        if self.oracles.is_empty() {
+            None
+        } else {
+            let mut map: BTreeMap<Option<BetOutcome>, u64> = BTreeMap::new();
 
-        for o in self.oracles.values() {
-            *map.entry(o.outcome).or_insert(0) += o.stake;
+            for o in self.oracles.values() {
+                *map.entry(o.outcome).or_insert(0) += o.stake;
+            }
+
+            let mut vec = Vec::from_iter(map);
+            vec.sort_by_key(|kv| kv.1);
+
+            vec[vec.len() - 1].0
         }
-
-        let mut vec = Vec::from_iter(map);
-        vec.sort_by_key(|kv| kv.1);
-
-        vec[vec.len() - 1].0
     }
     pub fn new_bet(&mut self, odds: u32, wager: u64, bettor: Pubkey, bet_direction: BetDirection) {
         let mut id = [0_u8; 8];

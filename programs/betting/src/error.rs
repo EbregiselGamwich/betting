@@ -18,4 +18,6 @@ pub enum BettingError {
     NotInWindow = 6,
     #[msg("NotFound")]
     NotFound = 7,
+    #[msg("NoResultYet")]
+    NoResultYet = 8,
 }

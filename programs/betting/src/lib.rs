@@ -86,4 +86,7 @@ pub mod betting {
     ) -> Result<()> {
         instructions::book_operator_resolve_dispute(ctx, bet_outcome)
     }
+    pub fn book_bettor_settle(ctx: Context<BookBettorSettleAccounts>) -> Result<()> {
+        instructions::book_bettor_settle(ctx)
+    }
 }
