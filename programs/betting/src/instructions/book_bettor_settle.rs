@@ -12,6 +12,7 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct BookBettorSettleAccounts<'info> {
+    /// CHECK: will be checked in the instruction
     #[account(mut)]
     pub bettor: UncheckedAccount<'info>,
     #[account(mut,seeds=[b"UserAccount".as_ref(),bettor.key().as_ref()],bump)]
